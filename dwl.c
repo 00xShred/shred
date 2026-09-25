@@ -746,7 +746,7 @@ buttonpress(struct wl_listener *listener, void *data)
 void
 capturerequest(struct wl_listener *listener, void *data)
 {
-	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request *request = data;
+	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_event *request = data;
 	Client *view = request->toplevel_handle->data;
 
 	if (!view->image_capture_source) {
@@ -2756,14 +2756,14 @@ setup(void)
 	foreign_toplevel_list = wlr_ext_foreign_toplevel_list_v1_create(dpy,1);
 	ext_foreign_toplevel_image_capture_source_manager_v1 =
             wlr_ext_foreign_toplevel_image_capture_source_manager_v1_create(dpy, 1);
-	wl_signal_add(&ext_foreign_toplevel_image_capture_source_manager_v1->events.new_request,
+	wl_signal_add(&ext_foreign_toplevel_image_capture_source_manager_v1->events.capture_request,
 			&new_foreign_toplevel_capture_request);
 
 	/* Use decoration protocols to negotiate server-side decorations */
 	wlr_server_decoration_manager_set_default_mode(
 			wlr_server_decoration_manager_create(dpy),
 			WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
-	xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(dpy);
+	xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(dpy, 2);
 	wl_signal_add(&xdg_decoration_mgr->events.new_toplevel_decoration, &new_xdg_decoration);
 
 	pointer_constraints = wlr_pointer_constraints_v1_create(dpy);
