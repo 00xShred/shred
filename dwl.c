@@ -91,6 +91,7 @@ enum { XDGShell, LayerShell, X11 }; /* client types */
 enum { LyrBg, LyrBottom, LyrTile, LyrFloat, LyrTop, LyrFS, LyrUnmanaged, LyrOverlay,
     LyrIMPopup, LyrBlock, NUM_LAYERS }; /* scene layers */
 enum { AxisUp, AxisRight, AxisDown, AxisLeft };
+enum { DirLeft, DirDown, DirUp, DirRight };
 
 typedef union {
     int i;
@@ -307,7 +308,7 @@ static void destroykeyboardgroup(struct wl_listener *listener, void *data);
 static Monitor *dirtomon(enum wlr_direction dir);
 static void focusclient(Client *c, LayerSurface *l, int lift);
 static void focusmon(const Arg *arg);
-static void focusstack(const Arg *arg);
+static void focusdir(const Arg *arg);
 static Client *focustop(Monitor *m);
 static void fullscreennotify(struct wl_listener *listener, void *data);
 static void gpureset(struct wl_listener *listener, void *data);
@@ -1618,29 +1619,60 @@ focusmon(const Arg *arg)
 }
 
 void
-focusstack(const Arg *arg)
+focusdir(const Arg *arg)
 {
-    /* Focus the next or previous client (in tiling order) on selmon */
-    Client *c, *sel = focustop(selmon);
-    if (!sel || (sel->isfullscreen && !client_has_children(sel)))
-        return;
-    if (arg->i > 0) {
-        wl_list_for_each(c, &sel->link, link) {
-            if (&c->link == &clients)
-                continue; /* wrap past the sentinel node */
-            if (VISIBLEON(c, selmon))
-                break; /* found it */
-        }
-    } else {
-        wl_list_for_each_reverse(c, &sel->link, link) {
-            if (&c->link == &clients)
-                continue; /* wrap past the sentinel node */
-            if (VISIBLEON(c, selmon))
-                break; /* found it */
-        }
-    }
-    /* If only one client is visible on selmon, then c == sel */
-    focusclient(c, NULL, 1);
+	Client *c, *best = NULL;
+	Client *sel = focustop(selmon);
+	int sx, sy, cx, cy, dx, dy;
+	long dist, bestdist = LONG_MAX;
+
+	if (!sel || (sel->isfullscreen && !client_has_children(sel)))
+		return;
+
+	sx = sel->geom.x + sel->geom.width / 2;
+	sy = sel->geom.y + sel->geom.height / 2;
+
+	wl_list_for_each(c, &clients, link) {
+		if (c == sel || !VISIBLEON(c, selmon))
+			continue;
+
+		cx = c->geom.x + c->geom.width / 2;
+		cy = c->geom.y + c->geom.height / 2;
+
+		dx = cx - sx;
+		dy = cy - sy;
+
+		switch (arg->i) {
+		case DirLeft:
+			if (dx >= 0)
+				continue;
+			break;
+		case DirRight:
+			if (dx <= 0)
+				continue;
+			break;
+		case DirUp:
+			if (dy >= 0)
+				continue;
+			break;
+		case DirDown:
+			if (dy <= 0)
+				continue;
+			break;
+		default:
+			return;
+		}
+
+		dist = (long)dx * dx + (long)dy * dy;
+
+		if (dist < bestdist) {
+			bestdist = dist;
+			best = c;
+		}
+	}
+
+	if (best)
+		focusclient(best, NULL, 1);
 }
 
 /* We probably should change the name of this: it sounds like it
