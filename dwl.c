@@ -377,6 +377,7 @@ static void xytonode(double x, double y, struct wlr_surface **psurface,
 static void zoom(const Arg *arg);
 static void moveleft(const Arg *arg);
 static void moveright(const Arg *arg);
+static void movevertical(const Arg *arg);
 
 /* variables */
 static pid_t child_pid = -1;
@@ -1621,58 +1622,58 @@ focusmon(const Arg *arg)
 void
 focusdir(const Arg *arg)
 {
-	Client *c, *best = NULL;
-	Client *sel = focustop(selmon);
-	int sx, sy, cx, cy, dx, dy;
-	long dist, bestdist = LONG_MAX;
+    Client *c, *best = NULL;
+    Client *sel = focustop(selmon);
+    int sx, sy, cx, cy, dx, dy;
+    long dist, bestdist = LONG_MAX;
 
-	if (!sel || (sel->isfullscreen && !client_has_children(sel)))
-		return;
+    if (!sel || (sel->isfullscreen && !client_has_children(sel)))
+        return;
 
-	sx = sel->geom.x + sel->geom.width / 2;
-	sy = sel->geom.y + sel->geom.height / 2;
+    sx = sel->geom.x + sel->geom.width / 2;
+    sy = sel->geom.y + sel->geom.height / 2;
 
-	wl_list_for_each(c, &clients, link) {
-		if (c == sel || !VISIBLEON(c, selmon))
-			continue;
+    wl_list_for_each(c, &clients, link) {
+        if (c == sel || !VISIBLEON(c, selmon))
+            continue;
 
-		cx = c->geom.x + c->geom.width / 2;
-		cy = c->geom.y + c->geom.height / 2;
+        cx = c->geom.x + c->geom.width / 2;
+        cy = c->geom.y + c->geom.height / 2;
 
-		dx = cx - sx;
-		dy = cy - sy;
+        dx = cx - sx;
+        dy = cy - sy;
 
-		switch (arg->i) {
-		case DirLeft:
-			if (dx >= 0)
-				continue;
-			break;
-		case DirRight:
-			if (dx <= 0)
-				continue;
-			break;
-		case DirUp:
-			if (dy >= 0)
-				continue;
-			break;
-		case DirDown:
-			if (dy <= 0)
-				continue;
-			break;
-		default:
-			return;
-		}
+        switch (arg->i) {
+            case DirLeft:
+                if (dx >= 0)
+                    continue;
+                break;
+            case DirRight:
+                if (dx <= 0)
+                    continue;
+                break;
+            case DirUp:
+                if (dy >= 0)
+                    continue;
+                break;
+            case DirDown:
+                if (dy <= 0)
+                    continue;
+                break;
+            default:
+                return;
+        }
 
-		dist = (long)dx * dx + (long)dy * dy;
+        dist = (long)dx * dx + (long)dy * dy;
 
-		if (dist < bestdist) {
-			bestdist = dist;
-			best = c;
-		}
-	}
+        if (dist < bestdist) {
+            bestdist = dist;
+            best = c;
+        }
+    }
 
-	if (best)
-		focusclient(best, NULL, 1);
+    if (best)
+        focusclient(best, NULL, 1);
 }
 
 /* We probably should change the name of this: it sounds like it
@@ -3354,6 +3355,85 @@ moveright(const Arg *arg)
      */
     wl_list_remove(&sel->link);
     wl_list_insert(&next->link, &sel->link);
+
+    focusclient(sel, NULL, 1);
+    arrange(selmon);
+}
+
+void
+movevertical(const Arg *arg)
+{
+    Client *c, *target = NULL, *master = NULL;
+    Client *first = NULL, *last = NULL;
+    Client *sel = focustop(selmon);
+
+    if (!sel || !selmon || !selmon->lt[selmon->sellt]->arrange
+        || sel->isfloating || sel->isfullscreen)
+        return;
+
+    /* Find master, first stack client, and last stack client. */
+    wl_list_for_each(c, &clients, link) {
+        if (!VISIBLEON(c, selmon) || c->isfloating || c->isfullscreen)
+            continue;
+
+        if (!master) {
+            master = c;
+            continue;
+        }
+
+        if (!first)
+            first = c;
+
+        last = c;
+    }
+
+    /* Master never moves vertically; stack needs at least two clients. */
+    if (!master || sel == master || !first || first == last)
+        return;
+
+    if (arg->i > 0) {
+        /* Move down. */
+        wl_list_for_each(c, &sel->link, link) {
+            if (&c->link == &clients)
+                continue;
+
+            if (VISIBLEON(c, selmon) && !c->isfloating && !c->isfullscreen) {
+                target = c;
+                break;
+            }
+        }
+
+        if (target) {
+            /* Normal case: swap downward one position. */
+            wl_list_remove(&sel->link);
+            wl_list_insert(&target->link, &sel->link);
+        } else {
+            /* Bottom of stack -> wrap to top of stack. */
+            wl_list_remove(&sel->link);
+            wl_list_insert(master->link.next, &sel->link);
+        }
+    } else {
+        /* Move up. */
+        wl_list_for_each_reverse(c, &sel->link, link) {
+            if (&c->link == &clients)
+                continue;
+
+            if (VISIBLEON(c, selmon) && !c->isfloating && !c->isfullscreen) {
+                target = c;
+                break;
+            }
+        }
+
+        if (target && target != master) {
+            /* Normal case: swap upward one position. */
+            wl_list_remove(&sel->link);
+            wl_list_insert(target->link.prev, &sel->link);
+        } else {
+            /* Top of stack -> wrap to bottom of stack. */
+            wl_list_remove(&sel->link);
+            wl_list_insert(&last->link, &sel->link);
+        }
+    }
 
     focusclient(sel, NULL, 1);
     arrange(selmon);
