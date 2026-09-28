@@ -375,6 +375,7 @@ static void xytonode(double x, double y, struct wlr_surface **psurface,
                      Client **pc, LayerSurface **pl, double *nx, double *ny);
 static void zoom(const Arg *arg);
 static void moveleft(const Arg *arg);
+static void moveright(const Arg *arg);
 
 /* variables */
 static pid_t child_pid = -1;
@@ -3256,28 +3257,74 @@ xytonode(double x, double y, struct wlr_surface **psurface,
 void
 moveleft(const Arg *arg)
 {
-	Client *sel = focustop(selmon);
-	Client *c;
+    Client *sel = focustop(selmon);
+    Client *c;
 
-	if (!sel || !selmon || !selmon->lt[selmon->sellt]->arrange
-			|| sel->isfloating || sel->isfullscreen)
-		return;
+    if (!sel || !selmon || !selmon->lt[selmon->sellt]->arrange
+        || sel->isfloating || sel->isfullscreen)
+        return;
 
-	/* If sel is already the first tiled client, it is already master. */
-	wl_list_for_each(c, &clients, link) {
-		if (VISIBLEON(c, selmon) && !c->isfloating && !c->isfullscreen)
-			break;
-	}
+    /* If sel is already the first tiled client, it is already master. */
+    wl_list_for_each(c, &clients, link) {
+        if (VISIBLEON(c, selmon) && !c->isfloating && !c->isfullscreen)
+            break;
+    }
 
-	if (&c->link == &clients || c == sel)
-		return;
+    if (&c->link == &clients || c == sel)
+        return;
 
-	/* Move selected client to the front of the tiling order. */
-	wl_list_remove(&sel->link);
-	wl_list_insert(&clients, &sel->link);
+    /* Move selected client to the front of the tiling order. */
+    wl_list_remove(&sel->link);
+    wl_list_insert(&clients, &sel->link);
 
-	focusclient(sel, NULL, 1);
-	arrange(selmon);
+    focusclient(sel, NULL, 1);
+    arrange(selmon);
+}
+
+void
+moveright(const Arg *arg)
+{
+    Client *sel = focustop(selmon);
+    Client *c, *next = NULL;
+
+    if (!sel || !selmon || !selmon->lt[selmon->sellt]->arrange
+        || sel->isfloating || sel->isfullscreen)
+        return;
+
+    /* Find the first tiled client (master). */
+    wl_list_for_each(c, &clients, link) {
+        if (VISIBLEON(c, selmon) && !c->isfloating && !c->isfullscreen)
+            break;
+    }
+
+    /* Only the master can move right. */
+    if (&c->link == &clients || c != sel)
+        return;
+
+    /* Find the next tiled client on this monitor. */
+    wl_list_for_each(c, &sel->link, link) {
+        if (&c->link == &clients)
+            continue;
+
+        if (VISIBLEON(c, selmon) && !c->isfloating && !c->isfullscreen) {
+            next = c;
+            break;
+        }
+    }
+
+    if (!next)
+        return;
+
+    /*
+     * Swap the master with the first client in the stack:
+     *
+     * A B C D -> B A C D
+     */
+    wl_list_remove(&sel->link);
+    wl_list_insert(&next->link, &sel->link);
+
+    focusclient(sel, NULL, 1);
+    arrange(selmon);
 }
 
 void
