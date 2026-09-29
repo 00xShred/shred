@@ -358,6 +358,7 @@ static void startdrag(struct wl_listener *listener, void *data);
 static void tag(const Arg *arg);
 static void tagmon(const Arg *arg);
 static void tile(Monitor *m);
+static void balanced(Monitor *m);
 static void togglefloating(const Arg *arg);
 static void togglefullscreen(const Arg *arg);
 static void toggletag(const Arg *arg);
@@ -2934,6 +2935,88 @@ tagmon(const Arg *arg)
     Client *sel = focustop(selmon);
     if (sel)
         setmon(sel, dirtomon(arg->i), 0);
+}
+
+void
+balanced(Monitor *m)
+{
+    unsigned int n = 0, cols, rows;
+    unsigned int i = 0, row, col;
+    unsigned int row_start, row_count, remaining;
+    int x, y, w, h;
+    Client *c;
+
+    /* Count tiled clients. */
+    wl_list_for_each(c, &clients, link) {
+        if (VISIBLEON(c, m) && !c->isfloating && !c->isfullscreen)
+            n++;
+    }
+
+    if (n == 0)
+        return;
+
+    /*
+     * Choose the number of columns based on the monitor orientation.
+     *
+     * Landscape:
+     *   1 -> 1
+     *   2 -> 2
+     *   3 -> 3
+     *   4 -> 2x2
+     *   5 -> 3+2
+     *   6 -> 3+3
+     *
+     * Portrait naturally favors fewer columns.
+     */
+    cols = (unsigned int)ceilf(sqrtf((float)n *
+                                     (float)m->w.width / (float)m->w.height));
+
+    if (cols > n)
+        cols = n;
+    if (cols < 1)
+        cols = 1;
+
+    rows = (n + cols - 1) / cols;
+
+    wl_list_for_each(c, &clients, link) {
+        if (!VISIBLEON(c, m) || c->isfloating || c->isfullscreen)
+            continue;
+
+        row = i / cols;
+        row_start = row * cols;
+
+        /*
+         * Number of actual clients in this row.
+         * The final row may contain fewer than `cols`.
+         */
+        remaining = n - row_start;
+        row_count = MIN(cols, remaining);
+
+        col = i - row_start;
+
+        /*
+         * Every row consumes the entire monitor width.
+         * Therefore an incomplete final row has no empty cells.
+         */
+        x = m->w.x + (int)(col * m->w.width / row_count);
+        w = m->w.x
+            + (int)((col + 1) * m->w.width / row_count)
+            - x;
+
+        y = m->w.y + (int)(row * m->w.height / rows);
+        h = m->w.y
+            + (int)((row + 1) * m->w.height / rows)
+            - y;
+
+        resize(c, (struct wlr_box){
+            .x = x,
+            .y = y,
+            .width = w,
+            .height = h
+        }, 0);
+
+        i++;
+    }
 }
 
 void
